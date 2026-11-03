@@ -3,15 +3,14 @@ name: Build RUNOVA APK
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Java
@@ -26,17 +25,30 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Extract ZIP
+        run: |
+          ZIP="$(find . -maxdepth 1 -name '*.zip' | head -1)"
+          test -n "$ZIP" || { echo "No .zip file found in repo root"; exit 1; }
+          mkdir -p source
+          unzip -oq "$ZIP" -d source
+          PUB="$(find source -name pubspec.yaml -not -path '*/__MACOSX/*' | head -1)"
+          test -n "$PUB" || { echo "pubspec.yaml not found in zip"; exit 1; }
+          echo "APP_DIR=$(dirname "$PUB")" >> "$GITHUB_ENV"
+
       - name: Generate Android project files
+        working-directory: ${{ env.APP_DIR }}
         run: flutter create --org com.runova.app --project-name runova --platforms=android .
 
       - name: Install dependencies
+        working-directory: ${{ env.APP_DIR }}
         run: flutter pub get
 
       - name: Build APK
+        working-directory: ${{ env.APP_DIR }}
         run: flutter build apk --release
 
-      - name: Upload APK
+      - name: Save APK
         uses: actions/upload-artifact@v4
         with:
           name: RUNOVA-APK
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: ${{ env.APP_DIR }}/build/app/outputs/flutter-apk/app-release.apk
